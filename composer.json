@@ -1,0 +1,19 @@
+{
+  "autoload": {
+    "psr-4": {
+      "MyShopKit\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "MyShopKitTest\\": "tests/"
+    }
+  },
+  "require-dev": {
+    "wilokecom/phpcli": "^1.28"
+  },
+  "require": {
+    "webmozart/assert": "^1.10",
+    "phpunit/phpunit": "^7"
+  }
+}
