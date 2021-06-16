@@ -5,6 +5,7 @@ namespace MyShopKit\MailServices\Klaviyo\Controllers;
 use Klaviyo\Exception\KlaviyoException;
 use Klaviyo\Klaviyo;
 use Klaviyo\Klaviyo as KlaviyoApi;
+use Klaviyo\Model\ProfileModel as KlaviyoProfile;
 use MyShopKit\Illuminate\Message\MessageFactory;
 use MyShopKit\MailServices\Shared\TraitGenerateRestEndpoint;
 use MyShopKit\MailServices\Shared\TraitMailServicesConfiguration;
@@ -36,8 +37,14 @@ class KlaviyoController {
 					'callback'            => [ $this, 'saveApiKey' ],
 					'permission_callback' => '__return_true',
 				],
+			]
+		);
+		register_rest_route(
+			MYSHOPKIT_REST,
+			$this->getChangeServiceStatusEndPoint( $this->mailService ),
+			[
 				[
-					'methods'             => 'PATCH',
+					'methods'             => 'PUT',
 					'callback'            => [ $this, 'changeServiceStatus' ],
 					'permission_callback' => '__return_true',
 				],
@@ -55,6 +62,17 @@ class KlaviyoController {
 				[
 					'methods'             => 'POST',
 					'callback'            => [ $this, 'saveListId' ],
+					'permission_callback' => '__return_true',
+				],
+			]
+		);
+		register_rest_route(
+			MYSHOPKIT_REST,
+			$this->getSaveEmailEndPoint( $this->mailService ),
+			[
+				[
+					'methods'             => 'POST',
+					'callback'            => [ $this, 'subscribeEmailManually' ],
 					'permission_callback' => '__return_true',
 				],
 			]
@@ -159,8 +177,8 @@ class KlaviyoController {
 	
 	public function changeServiceStatus( WP_REST_Request $oRequest ): WP_REST_Response {
 		$status = $oRequest->get_param( 'status' );
-		if ( empty( $status ) || ( $status !== 'active' && $status !== 'deactive' ) ) {
-			return MessageFactory::factory( 'rest' )->error( esc_html__( 'We have some problems processing your request. PLease check again.', 'myshopkit' ), 400 );
+		if ( empty( $status ) || ! in_array( $status, [ 'deactive', 'active' ] ) ) {
+			return MessageFactory::factory( 'rest' )->error( esc_html__( 'Please active or deactive the service.', 'myshopkit' ), 400 );
 		}
 		$aResponseCheckIsUserLoggedIn = $this->checkIsUserLoggedIn();
 		if ( $aResponseCheckIsUserLoggedIn['status'] == 'success' ) {
@@ -192,6 +210,119 @@ class KlaviyoController {
 		}
 		return MessageFactory::factory( 'rest' )
 		                     ->error( $aResponseCheckUserLoggedIn['message'], $aResponseCheckUserLoggedIn['code'] );
+	}
+	
+	public function subscribeEmailManually( WP_REST_Request $oRequest ): WP_REST_Response {
+		$aResponseCheckUserLoggedIn = $this->checkIsUserLoggedIn();
+		if ( $aResponseCheckUserLoggedIn['status'] == 'success' ) {
+			$userID                   = get_current_user_id();
+			$email                    = $oRequest->get_param( 'email' );
+			$aResponseCheckEmailValid = $this->checkIsEmailValid( $email ?? '' );
+			if ( $aResponseCheckEmailValid['status'] == 'success' ) {
+				$aUserMeta = $this->getCurrentUserMeta( $userID );
+				if ( $aUserMeta['status'] == 'active' ) {
+					$publicApiKey              = $aUserMeta['publicApiKey'];
+					$privateApiKey             = $aUserMeta['privateApiKey'];
+					$aResponseCheckApiKeyValid = $this->checkIsUserApiKeyValid( $privateApiKey, $publicApiKey );
+					if ( $aResponseCheckApiKeyValid['status'] == 'success' ) {
+						$listID                    = $aUserMeta['listID'];
+						$aResponseCheckListIdValid = $this->checkIsUserListIdValid( $privateApiKey, $publicApiKey, $listID );
+						if ( $aResponseCheckListIdValid['status'] == 'success' ) {
+							$this->connectKlaviyo( $privateApiKey, $publicApiKey );
+							try {
+								$this->connectKlaviyo( $privateApiKey, $publicApiKey );
+								$addProfile = [
+									new KlaviyoProfile(
+										[
+											'$email' => $email,
+										]
+									),
+								];
+								$this->postEmail( $addProfile, $listID );
+								return MessageFactory::factory( 'rest' )
+								                     ->success( esc_html__( 'Email is added to the list successfully',
+									                     'myshopkit' ) );
+							} catch ( KlaviyoException $oException ) {
+								return MessageFactory::factory( 'rest' )
+								                     ->success( $oException->getMessage() );
+							}
+						}
+						return MessageFactory::factory( 'rest' )
+						                     ->error( $aResponseCheckListIdValid['message'], $aResponseCheckListIdValid['code'] );
+					}
+					return MessageFactory::factory( 'rest' )
+					                     ->error( $aResponseCheckApiKeyValid['message'], $aResponseCheckApiKeyValid['code'] );
+				}
+				return MessageFactory::factory( 'rest' )
+				                     ->error( esc_html__( 'Service hasn\'t been active yet. Please active it before process.',
+					                     'myshopkit' ), 400 );
+			}
+			return MessageFactory::factory( 'rest' )
+			                     ->error( $aResponseCheckEmailValid['message'], $aResponseCheckEmailValid['code'] );
+		}
+		return MessageFactory::factory( 'rest' )
+		                     ->error( $aResponseCheckUserLoggedIn['message'], $aResponseCheckUserLoggedIn['code'] );
+	}
+	
+	/**
+	 * Subscribe User Email directly
+	 *
+	 * @param array $aInfo = array('email' => $email);
+	 *
+	 * @return WP_REST_Response
+	 */
+	public function subscribeEmailDirectly( array $aInfo ): WP_REST_Response {
+		$aUserMeta = $this->getCurrentUserMeta( get_current_user_id() );
+		if ( $aUserMeta['status'] == 'active' ) {
+			$publicApiKey              = $aUserMeta['publicApiKey'];
+			$privateApiKey             = $aUserMeta['privateApiKey'];
+			$aResponseCheckApiKeyValid = $this->checkIsUserApiKeyValid( $privateApiKey, $publicApiKey );
+			if ( $aResponseCheckApiKeyValid['status'] == 'success' ) {
+				$listID                    = $aUserMeta['listID'];
+				$aResponseCheckListIdValid = $this->checkIsUserListIdValid( $privateApiKey, $publicApiKey, $listID );
+				if ( $aResponseCheckListIdValid['status'] == 'success' ) {
+					$this->connectKlaviyo( $privateApiKey, $publicApiKey );
+					try {
+						$this->connectKlaviyo( $privateApiKey, $publicApiKey );
+						$email = $aInfo['email'];
+						$addProfile = [
+							new KlaviyoProfile(
+								[
+									'$email' => $email,
+								]
+							),
+						];
+						$this->postEmail( $addProfile, $listID );
+						return MessageFactory::factory( 'rest' )
+						                     ->success( esc_html__( 'Email is added to the list successfully',
+							                     'myshopkit' ) );
+					} catch ( KlaviyoException $oException ) {
+						return MessageFactory::factory( 'rest' )
+						                     ->success( $oException->getMessage() );
+					}
+				}
+				return MessageFactory::factory( 'rest' )
+				                     ->error( $aResponseCheckListIdValid['message'], $aResponseCheckListIdValid['code'] );
+			}
+			return MessageFactory::factory( 'rest' )
+			                     ->error( $aResponseCheckApiKeyValid['message'], $aResponseCheckApiKeyValid['code'] );
+		}
+		return MessageFactory::factory( 'rest' )
+		                     ->error( esc_html__( 'Service hasn\'t been active yet. Please active it before process.',
+			                     'myshopkit' ), 400 );
+	}
+	
+	/**
+	 * process update user email
+	 *
+	 *
+	 * @param string $email
+	 * @param string $apiKey
+	 * @param string $listID
+	 *
+	 */
+	public function postEmail( array $addProfile, string $listID ) {
+		self::$oClient->lists->addMembersToList( $listID, $addProfile );
 	}
 	
 }
