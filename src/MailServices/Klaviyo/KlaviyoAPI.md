@@ -2,7 +2,11 @@
 
 ## 1.Lấy Klaviyo API key.
 
+<<<<<<< HEAD
 ###Link lấy API key:
+=======
+### Link lấy API key:
+>>>>>>> MYS-63 add post email and phpunit
 https://www.klaviyo.com/account#api-keys-tab
 
 Theo mặc định thì Klaviyo sẽ tự động tạo public API key cho bạn. Nếu bạn vừa tạo tài khoản thì bạn phải tạo ra một private API key mới.<br>
@@ -76,16 +80,28 @@ export interface Item {
 }
 ````
 
+<<<<<<< HEAD
 ##4.Lưu email vào list. 
 ###Method: POST.
+=======
+## 4.Lưu email vào list. 
+### Method: POST.
+>>>>>>> MYS-63 add post email and phpunit
 ### Example API endpoint:
 
 https://website.com/wp-json/myshopkit/v1/me/klaviyo/lists/members
 
+<<<<<<< HEAD
 #####description
 Để API hoạt động đúng bạn cần lưu API key và list id của bạn trước khi chạy API lưu email.
 
 #####parameters
+=======
+##### description
+Để API hoạt động đúng bạn cần lưu API key và list id của bạn trước khi chạy API lưu email.
+
+##### parameters
+>>>>>>> MYS-63 add post email and phpunit
 
 Parameters | Data Type	 | Data Default | Description
 --- | --- | :---: | ---
